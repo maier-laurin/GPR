@@ -1,0 +1,18 @@
+data/
+plots/
+
+# -- Julia-spezifisch --
+# Build-Artefakte
+build/
+deps/
+
+# -- OS-spezifisch --
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# -- IDE-spezifisch --
+# VS Code
+.vscode/
