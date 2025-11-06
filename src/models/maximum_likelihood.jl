@@ -1,10 +1,13 @@
 #* Maximum Liklehood Model
 
+module MLModel
+export train_ml_model
 #---- Librarys and imports -----------------------------------------------------
     using Optim
-    include("kernel_matrix.jl")
-    include("prior_distribution.jl")
-    include("GPR_log_liklihood.jl")
+    using LinearAlgebra
+    using ..Kernels
+    using ..Priors
+    using ..Likelihood   
 
 #---- function defenition ------------------------------------------------------
     """
@@ -39,23 +42,31 @@
         y::AbstractVector{<:Real}; 
         num_restarts::Int = 10
     )
+        T = promote_type(eltype(X), eltype(y))
         N, d = size(X)
         
         # This is the objective function for Optim.jl to *minimize*.
         # It takes a single vector `p` of *unconstrained* parameters.
-        function nll_objective(p_log::AbstractVector{<:Real})::Real
+        function nll_objective(p_log::AbstractVector{<:Real})
             try
-                # --- 1. Reparameterization (Unconstrained -> Constrained) ---
+                # Reparameterization (Unconstrained -> Constrained)
                 # We use `exp` to ensure all parameters are positive.
                 ϑ = exp.(p_log[1:d])
                 τ = exp(p_log[d+1])
-                σ² = exp(p_log[d+2])
+                #= 
+                ! we use a different activation function for σ² since the optimicer searches to often in lage negative spaces for log(sigma) 
+                 and there which would make the exponent of it effectivly 0 which causes the Kovariance matrix (K+Iσ) to be just positiv semidefinite not strictly
+                 anymore wich causes cholesky to fail, which would be catched and the function gets a value of ∞ but apperently the solver does not like it anyways
+                * so we set the valid domain of σ² to (ϵ, ∞) 
+                =#
+                σ² = log1p(exp(p_log[d+2])) +  1e-6
 
-                # --- 2. Build Covariance Matrix (Fast Version) ---
+
+                # Build Covariance Matrix (Fast Version)
                 # We don't need AD here, so we use the fast, mutating version.
                 K_noisy = build_covariance_matrix(X, ϑ, τ, σ2=σ²)
                 
-                # --- 3. Calculate NLL ---
+                # Calculate NLL
                 # We return the *negative* log-likelihood for minimization.
                 return -gpr_log_likelihood(y, K_noisy)
                 
@@ -63,7 +74,8 @@
                 # If `cholesky` fails (e.g., matrix not PD), return Inf
                 # to tell the optimizer this is a bad region.
                 if isa(e, PosDefException)
-                    return Inf
+                    T = promote_type(eltype(X), eltype(y))
+                    return T(Inf)
                 else
                     rethrow(e)
                 end
@@ -72,31 +84,36 @@
         
         # --- Optimization Loop ---
         best_nll = Inf
-        best_params_log = Vector{Float64}(undef, d + 2)
-        
-        println("Starting ML training with $num_restarts restarts...")
-        
-        for i in 1:num_restarts
-            # 1. Random start for *log-parameters*
-            #    `randn` centers starting points around 1.0 in positive-space
-            p_start_log = randn(d + 2)
+        best_params_log = Vector{T}(undef, d + 2)
+        nthreads = Threads.nthreads()
+        println("Starting ML training with $num_restarts restarts on $nthreads awailable threads...")
+        # the restart loop is trivially paralicable, we only need to be carefull about race contitions
+        # therefor we save all solutions and find the best later
+        all_results = Vector{Any}(undef, num_restarts)
+        Threads.@threads for i in 1:num_restarts
+            # Random start for *log-parameters* log around 0 -> exp around 1
+            p_start_log = randn(T, d + 2)
             
-            # 2. Run the optimizer
-            result = optimize(
+            # Run the optimizer
+            result_i = optimize(
                 nll_objective, 
                 p_start_log, 
                 LBFGS(),
-                Optim.Options(g_tol = 1e-5, iterations = 1000)
+                Optim.Options(g_tol = 1e-5, iterations = 10000)
             )
-            
-            # 3. Store if it's the best result
+
+            all_results[i] = result_i
+            print(".")
+        end
+
+        for result in all_results
             if Optim.minimum(result) < best_nll
                 best_nll = Optim.minimum(result)
                 best_params_log = Optim.minimizer(result)
             end
-            print(".")
         end
-        println("\nML training complete. Best NLL: $best_nll")
+
+        println("\nML training complete.")
         
         # Return the best results
         return (
@@ -110,19 +127,4 @@
         )
     end
 
-#---- Testing ------------------------------------------------------------------
-#=
-    # 1. Define dummy data
-    N_obs = 100
-    N_features = 3
-    X_data = randn(N_obs, N_features)
-    y_data = sin.(X_data[:, 1]*2) .* 0.5 + randn(N_obs) .* 0.1
-    scatter(X_data[:,1], y_data)
-    
-    ml_result = train_ml_model(X_data, y_data, num_restarts=10)
-
-    println("\n--- Optimized ML Parameters ---")
-    println("ϑ (positive): ", ml_result.params_positive.ϑ)
-    println("τ (positive): ", ml_result.params_positive.τ)
-    println("σ² (positive): ", ml_result.params_positive.σ²)
-=#
+end

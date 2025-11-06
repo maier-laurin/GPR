@@ -1,9 +1,11 @@
 #* log likleehood
 
-module likelihood
+module Likelihood
+export gpr_log_likelihood, gpr_log_likelihood_unnorm
 
 #---- Librarys and imports -----------------------------------------------------
-    using LinearAlgebra, Distributions
+    using LinearAlgebra
+    using Distributions
 
 #---- function defenition ------------------------------------------------------
     """
@@ -27,16 +29,18 @@ module likelihood
     function gpr_log_likelihood(
         y::AbstractVector{<:Real}, 
         K_noisy::Symmetric{<:Real}
-    )::Real
+    )
+
+        T = promote_type(eltype(y), eltype(K_noisy))
         
         N = length(y)
         @assert size(K_noisy, 1) == N "Dimension mismatch: y has length $N, but K has size $(size(K_noisy, 1))."
         
-        # 1. Use Cholesky decomposition for stability and speed
+        # Use Cholesky decomposition for stability and speed
         #   C is a colescey decomposittion object storring one triangular matrix, but multible dispatch recognices it and uses the mure clever methodes where awailable
         C = cholesky(K_noisy)
         
-        # 2. Calculate the log-determinant: log|K| = logdet(C)
+        # Calculate the log-determinant: log|K| = logdet(C)
         log_det_K = logdet(C)
         
         # 3. Calculate the quadratic term: yᵀK⁻¹y = ||C.L \ y||²
@@ -45,7 +49,7 @@ module likelihood
         
         # 4. Sum the components
         #~   (o.p. S7 chap 3 first formular)
-        log_like = -0.5 * N * log(2π) - 0.5 * log_det_K - 0.5 * quad_term
+        log_like = -T(0.5) * N * log(T(2π)) - T(0.5) * log_det_K - T(0.5) * quad_term
         
         return log_like
     end
@@ -74,19 +78,21 @@ module likelihood
     function gpr_log_likelihood_unnorm(
         y::AbstractVector{<:Real}, 
         K_noisy::Symmetric{<:Real}
-    )::Real
+    )
+
+        T = promote_type(eltype(y), eltype(K_noisy))
         
-        # 1. Use Cholesky decomposition for stability and speed
+        # Use Cholesky decomposition for stability and speed
         C = cholesky(K_noisy)
         
-        # 2. Calculate the log-determinant
+        # Calculate the log-determinant
         log_det_K = logdet(C)
         
-        # 3. Calculate the quadratic term
+        # Calculate the quadratic term
         quad_term = sum(abs2, C.L \ y)
         
-        # 4. Sum the components from Equation 14 
-        log_like_unnorm = - 0.5 * log_det_K - 0.5 * quad_term
+        # Sum the components from Equation 14 
+        log_like_unnorm = - T(0.5) * log_det_K - (0.5) * quad_term
         
         return log_like_unnorm
     end

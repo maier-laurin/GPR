@@ -1,6 +1,6 @@
 #* building the kernel Matrix
 
-module kernel
+module Kernels
 export build_covariance_matrix, build_covariance_matrix_ad
 
 #---- Librarys and imports -----------------------------------------------------
@@ -34,7 +34,7 @@ export build_covariance_matrix, build_covariance_matrix_ad
         x::AbstractVector{<:Real}, 
         x_prime::AbstractVector{<:Real}, 
         ϑ::AbstractVector{<:Real}
-    )::Real
+    )
         
         # --- Error Handling ---
         d = length(x)
@@ -43,7 +43,9 @@ export build_covariance_matrix, build_covariance_matrix_ad
         @assert all(>=(0.0), ϑ) "All ϑ parameters must be non-negative."
         
         # --- Implementation ---
-        sum_weighted_sq_diff = 0.0
+        T = promote_type(eltype(x), eltype(x_prime), eltype(ϑ))
+        
+        sum_weighted_sq_diff = zero(T)
         for j ∈ 1:d
             sum_weighted_sq_diff += (x[j] - x_prime[j])^2 * ϑ[j]
         end
@@ -66,7 +68,7 @@ export build_covariance_matrix, build_covariance_matrix_ad
     - `x`: The first data point (d-dimensional vector).
     - `x_prime`: The second data point (d-dimensional vector).
     - `ϑ`: The d-dimensional vector of relevance parameters (θ_j).
-    - `τ`: The global variance parameter τ[cite: 71].
+    - `τ`: The global variance parameter τ.
 
     # Returns
     - A `Real` scalar representing the kernel covariance.
@@ -80,15 +82,15 @@ export build_covariance_matrix, build_covariance_matrix_ad
         x_prime::AbstractVector{<:Real}, 
         ϑ::AbstractVector{<:Real}, 
         τ::Real
-    )::Real
+    )
         
-        # --- Error Handling ---
         @assert τ > 0.0 "The `τ` parameter (overall variance) must be positive."
         
-        # --- Implementation ---
+        T = promote_type(eltype(x), eltype(x_prime), eltype(ϑ), typeof(τ))
+
         # Note: We compute the squared distance directly to avoid the `sqrt` in
         # `anisotropic_distance` only to square it again.
-        dist_sq = 0.0
+        dist_sq = zero(T)
         d = length(x)
         @assert length(x_prime) == d && length(ϑ) == d "Dimension mismatch between x, x_prime, and ϑ."
         @assert all(>=(0.0), ϑ) "All `theta` parameters must be non-negative"
@@ -97,7 +99,7 @@ export build_covariance_matrix, build_covariance_matrix_ad
             dist_sq += (x[j] - x_prime[j])^2 * ϑ[j]
         end
         
-        return (1.0 / τ) * exp(-0.5 * dist_sq)
+        return (T(1.0) / τ) * exp(-T(0.5) * dist_sq)
     end
 
     """
@@ -106,7 +108,7 @@ export build_covariance_matrix, build_covariance_matrix_ad
             ϑ::AbstractVector{<:Real}, 
             τ::Real; 
             σ2::Real = 0.0
-        ) -> Symmetric{Float64, Matrix{Float64}}
+        ) -> Symmetric{Real, Matrix{Float64}}
 
     Constructs the full N x N covariance matrix from the input data matrix `X`
     and the kernel hyperparameters `ϑ` and `τ`.
@@ -138,8 +140,8 @@ export build_covariance_matrix, build_covariance_matrix_ad
         X::Matrix{<:Real}, 
         ϑ::AbstractVector{<:Real}, 
         τ::Real; 
-        σ2::Real = 0.0
-    )::Symmetric{Float64, Matrix{Float64}}
+        σ2::Real = zero(typeof(τ))
+    )
 
         N, d = size(X)
         
@@ -148,7 +150,9 @@ export build_covariance_matrix, build_covariance_matrix_ad
         @assert σ2 >= 0.0 "Noise variance `σ2` must be non-negative."
 
         # --- Implementation ---
-        K = Matrix{Float64}(undef, N, N)
+        T = promote_type(eltype(X), eltype(ϑ), typeof(τ), typeof(σ2))
+        
+        K = Matrix{T}(undef, N, N)
 
         # We use `view` to get rows of X without allocating new memory.
         # This is more efficient than `X[i, :]` inside a loop.
@@ -158,7 +162,7 @@ export build_covariance_matrix, build_covariance_matrix_ad
             # Calculate diagonal element
             # k(x_i, x_i) is always (1/τ) since distance is 0.
             # Then add the noise variance.
-            K[i, i] = (1.0 / τ) + σ2
+            K[i, i] = (T(1.0) / τ) + σ2
             
             # Calculate off-diagonal elements
             for j in (i + 1):N
@@ -180,7 +184,7 @@ export build_covariance_matrix, build_covariance_matrix_ad
             ϑ::AbstractVector{<:Real}, 
             τ::Real; 
             σ2::Real = 0.0
-        ) -> Symmetric{Float64, Matrix{Float64}}
+        ) -> Symmetric{Real, Matrix{Float64}}
 
     Constructs the full N x N covariance matrix in an
     AD-friendly (non-mutating, functional) way.
@@ -203,8 +207,8 @@ export build_covariance_matrix, build_covariance_matrix_ad
         X::Matrix{<:Real}, 
         ϑ::AbstractVector{<:Real}, 
         τ::Real; 
-        σ2::Real = 0.0
-    )::Symmetric{Float64, Matrix{Float64}}
+        σ2::Real = zero(typeof(τ))
+    )
 
         N, d = size(X)
         
