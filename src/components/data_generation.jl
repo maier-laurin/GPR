@@ -57,6 +57,4 @@ export generate_gp_data
         return y_sample
     end
 
-
-
 end

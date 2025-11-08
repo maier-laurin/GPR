@@ -24,6 +24,16 @@ export total_log_posterior_unnorm
 include("components/data_generation.jl")
 using .DataGeneration
 export generate_gp_data
+
+include("components/predictions.jl")
+using .Predict
+export predictive_distribution
+
+include("components/visuals.jl")
+using .Visuals
+export extract_marginal_distributions, get_marginal_distributions, plot_gp_heatmap
+
+
 #* Include the model files
 
 include("models/maximum_likelihood.jl")
