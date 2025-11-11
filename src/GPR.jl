@@ -27,7 +27,7 @@ export generate_gp_data
 
 include("components/predictions.jl")
 using .Predict
-export predictive_distribution
+export predictive_distribution, predictive_distribution_marginal
 
 include("components/visuals.jl")
 using .Visuals

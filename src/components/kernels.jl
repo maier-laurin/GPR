@@ -1,7 +1,7 @@
 #* building the kernel Matrix
 
 module Kernels
-export build_covariance_matrix, build_covariance_matrix_ad
+export build_covariance_matrix, build_covariance_matrix_ad, se_kernel
 
 #---- Librarys and imports -----------------------------------------------------
     using LinearAlgebra

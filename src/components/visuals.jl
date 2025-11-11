@@ -5,6 +5,8 @@ module Visuals
     using Plots
     using Distributions
     using KernelDensity
+    using LinearAlgebra
+    using LaTeXStrings
     using ..Predict
     export extract_marginal_distributions, get_marginal_distributions, plot_gp_heatmap
 #---- function defenition ------------------------------------------------------
@@ -146,7 +148,7 @@ module Visuals
     function plot_gp_heatmap(
         X_values::AbstractVector{<:Real},
         Y_distributions::AbstractVector{<:Distribution},
-        y_range::Tuple{Float64, Float64};
+        y_range::Tuple{Real, Real};
         y_resolution::Int = 100,
         training_data::Union{Nothing, Tuple} = nothing,
         plot_title::String = "GP Posterior Predictive Density"
@@ -163,7 +165,7 @@ module Visuals
         heatmap_data = Matrix{Float64}(undef, n_y, n_x)
         
         # Loop over the matrix and fill with PDF values
-        Threads.@threads for (i, x) in enumerate(x_grid)
+        Threads.@threads for i ∈ eachindex(x_grid)
             # Get the corresponding distribution
             dist = Y_distributions[i]
             
@@ -178,12 +180,24 @@ module Visuals
             x_grid,
             y_grid,
             heatmap_data,
-            xlabel = "Input (x)",
-            ylabel = "Output (y)",
+            xlabel = L"x",
+            ylabel = L"f(x)",
             title = plot_title,
             color = cgrad([:white, :blue, :darkblue]), #TODO find domething aestheticly pleasing
             colorbar_title = "\nProbability Density",
             legend = :topleft
+        )
+        
+        # Plot the mean prediction
+        mean_line = mean.(Y_distributions) #the distribution Interface promises a means methode for all distribution objects
+        plot!(
+            p,
+            x_grid,
+            mean_line,
+            label = "Mean Prediction",
+            color = :darkblue,
+            linewidth = 1.5,
+            linestyle = :dot
         )
         
         # Plot training data on top
@@ -194,26 +208,13 @@ module Visuals
                 p,
                 X_train,
                 y_train,
-                label = "Training Data",
-                color = :red,
-                markersize = 4,
-                markerstrokewidth = 0.5,
-                markerstrokealpha = 0.7,
-                alpha = 0.7
+                label = "Samples",
+                color = :darkorange,
+                markersize = 5,
+                markerstrokecolor = :white
             )
         end
-        
-        # Plot the mean prediction
-        mean_line = mean.(Y_distributions) #the distribution Interface promises a means methode for all distribution objects
-        plot!(
-            p,
-            x_grid,
-            mean_line,
-            label = "Mean Prediction",
-            color = :black,
-            linewidth = 2.5
-        )
-        
+
         return p
     end
 

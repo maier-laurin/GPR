@@ -1,8 +1,7 @@
 #* testing the induviduall parts
-
+1
 using Plots
 using GPR
-
 #---- kernel -------------------------------------------------------------------
     
     # 1. Define dummy data
@@ -87,23 +86,46 @@ using GPR
 #---- data generation ----------------------------------------------------------
 
     # Define the "world"
-    N_obs = 200
+    N_obs = 50
     d_features = 1
     X_data = hcat(randn(N_obs)*5)
 
     # Define *true* hyperparameters
     ϑ_true = [1.0] # 1D ϑ
     τ_true = 1.0
-    σ²_true = 0.1 
+    σ2_true = 0.1 
 
     # Generate a sample
-    y_data = generate_gp_data(X_data, ϑ_true, τ_true, σ²_true)
+    y_data = generate_gp_data(X_data, ϑ_true, τ_true, σ2_true)
 
     scatter(X_data, y_data)
 
     train_ml_model(X_data, y_data, num_restarts=50)
     
+#---- testing ploting univariate GP --------------------------------------------
 
+    N_obs = 9
+    d_features = 1
+    X_data = hcat(randn(N_obs)*3)
+
+    # Define *true* hyperparameters
+    ϑ_true = [1.0] # 1D ϑ
+    τ_true = 2
+    σ2_true = 0.1 
+
+    # Generate a sample
+    y_data = generate_gp_data(X_data, ϑ_true, τ_true, σ2_true)
+    #predict at some points using the real parameters
+    X = reshape([ i for i ∈ -8:0.01:5], :, 1)
+    y = predictive_distribution_marginal(X, X_data, y_data, ϑ_true, τ_true, σ2_true)
+
+    #and visualice it
+    begin
+        p = plot_gp_heatmap(X[:,1], y, (-3, 3);y_resolution = 250, training_data = (X_data, y_data))
+        plot!(p, size = (1020, 720))
+        display(p)
+    end
+    savefig(p, "posterior.png")
 #---- mean field estimation ----------------------------------------------------
 
     a_hs = 0.5
@@ -142,5 +164,3 @@ using GPR
     println("Sample ϑ: ", round.(ϑ_sample, digits=3))
     println("Sample τ: ", round(τ_sample, digits=3))
     println("Sample σ²: ", round(σ²_sample, digits=3))
-
-    # (You would then pass these to `predict_posterior_distribution`)
