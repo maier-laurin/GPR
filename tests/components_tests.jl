@@ -102,21 +102,22 @@ using GPR
 
     train_ml_model(X_data, y_data, num_restarts=50)
     
-#---- testing ploting univariate GP --------------------------------------------
+#---- testing ploting univariate GP 1D -----------------------------------------
 
-    N_obs = 9
+    N_obs = 10
     d_features = 1
     X_data = hcat(randn(N_obs)*3)
 
     # Define *true* hyperparameters
     ϑ_true = [1.0] # 1D ϑ
-    τ_true = 2
+    τ_true = 1
     σ2_true = 0.1 
 
     # Generate a sample
     y_data = generate_gp_data(X_data, ϑ_true, τ_true, σ2_true)
     #predict at some points using the real parameters
-    X = reshape([ i for i ∈ -8:0.01:5], :, 1)
+    x_vec = -8:0.01:8
+    X = hcat(x_vec)
     y = predictive_distribution_marginal(X, X_data, y_data, ϑ_true, τ_true, σ2_true)
 
     #and visualice it
@@ -125,42 +126,43 @@ using GPR
         plot!(p, size = (1020, 720))
         display(p)
     end
-    savefig(p, "posterior.png")
+
+#---- testing ploting univariate GP 2D -----------------------------------------
+
+    N_obs = 50
+    d_features = 2
+    X_data = hcat(randn(N_obs)*3, randn(N_obs)*3)
+
+    # Define *true* hyperparameters
+    ϑ_true = [1.0, 5.0] # 1D ϑ
+    τ_true = 2
+    σ2_true = 0.1 
+
+    # Generate a sample
+    y_data = generate_gp_data(X_data, ϑ_true, τ_true, σ2_true)
+    #predict at some points using the real parameters
+    x_vec = -5:0.05:5
+    X = hcat(zeros(length(x_vec)), x_vec)
+    y = predictive_distribution_marginal(X, X_data, y_data, ϑ_true, τ_true, σ2_true)
+
+    #and visualice it
+    begin
+        p = plot_gp_heatmap(X[:,2], y, (-3, 3);y_resolution = 250, training_data = (X_data, y_data))
+        plot!(p, size = (1020, 720))
+        display(p)
+    end
+
 #---- mean field estimation ----------------------------------------------------
 
+    N_obs = 50
+    d_features = 2
+    X_data = hcat(randn(N_obs)*3, randn(N_obs)*3)
+    ϑ_true = [1.0, 5.0]
+    τ_true = 2
+    σ2_true = 0.1 
+    y_data = generate_gp_data(X_data, ϑ_true, τ_true, σ2_true)
+    
     a_hs = 0.5
     c_hs = 0.5
     mf_posterior_hs = train_mf_model(X_data, y_data, a=a_hs, c=c_hs)
 
-    println("\n--- MF: HS (Horseshoe) Result ---")
-    println("Approximation type: ", typeof(mf_posterior_hs))
-    println("Posterior Mean (log-space): ", round.(mean(mf_posterior_hs), digits=3))
-    println("Posterior StdDev (log-space): ", round.(sqrt.(diag(cov(mf_posterior_hs))), digits=3))
-
-    # --- 2. Train Model 3: Mean-Field Triple Gamma (MF: TG) ---
-    #    Corresponds to a=0.1, c=0.1 [cite: 410]
-    a_tg = 0.1
-    c_tg = 0.1
-    mf_posterior_tg = train_mf_model(X_data, y_data, a=a_tg, c=c_tg)
-
-    println("\n--- MF: TG (Triple Gamma) Result ---")
-    println("Approximation type: ", typeof(mf_posterior_tg))
-    println("Posterior Mean (log-space): ", round.(mean(mf_posterior_tg), digits=3))
-    println("Posterior StdDev (log-space): ", round.(sqrt.(diag(cov(mf_posterior_tg))), digits=3))
-
-    # --- 3. How to USE this result ---
-    #    To make a prediction, you draw samples from this distribution
-    #    and pass them to our prediction function.
-
-    println("\n--- Example: Drawing one sample from MF: HS posterior ---")
-    p_log_sample = rand(mf_posterior_hs)
-    N_test, d_test = size(X_data) # Just for demonstration
-
-    # Transform back to positive-space
-    ϑ_sample = exp.(p_log_sample[1:d_test])
-    τ_sample = exp(p_log_sample[d_test+1])
-    σ²_sample = exp(p_log_sample[d_test+2])
-
-    println("Sample ϑ: ", round.(ϑ_sample, digits=3))
-    println("Sample τ: ", round(τ_sample, digits=3))
-    println("Sample σ²: ", round(σ²_sample, digits=3))

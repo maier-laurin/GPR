@@ -66,7 +66,7 @@ export train_mf_model
         model = gpr_model_vi(X, y, a, c, d)
         
         # create the mean-field Gaussian approximation
-        q = q_meanfield_gaussian(model)
+        q = q_meanfield_gaussian(model, )
         
         # Define the algorithm to fit "q" to "model"
         alg = ADVI(ADTypes.AutoZygote())
