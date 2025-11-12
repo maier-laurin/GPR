@@ -129,9 +129,11 @@ module Visuals
             y_resolution::Int = 100,
             training_data::Union{Nothing, Tuple} = nothing,
             plot_title::String = "GP Posterior Predictive Density"
+            training_data_X_dimension::Int = 1
         )
 
-    Generates a 2D heatmap of the 1D posterior predictive distributions.
+    Generates a 2D heatmap of the 1D posterior predictive distributions, parsed via X_values and Y_distributions.
+    
 
     # Arguments
     - `X_values`: The vector of x-axis locations (N_test points).
@@ -143,17 +145,24 @@ module Visuals
     - `y_resolution`: The number of vertical "slices" for the heatmap.
     - `training_data`: An optional tuple `(X_train, y_train)` to scatter
                     on top of the plot.
-    - `plot_title`: The title for the plot.
+    - `training_data_X_dimension`: dimension of the X_train to add as scatter to the plot.
     """
     function plot_gp_heatmap(
         X_values::AbstractVector{<:Real},
         Y_distributions::AbstractVector{<:Distribution},
         y_range::Tuple{Real, Real};
         y_resolution::Int = 100,
-        training_data::Union{Nothing, Tuple} = nothing,
-        plot_title::String = "GP Posterior Predictive Density"
+        training_data::Union{Nothing, Tuple{AbstractMatrix{<:Real}, AbstractVector{<:Real}}} = nothing,
+        training_data_X_dimension::Int = 1
     )
+        @assert !isempty(X_values) "X_values vector cannot be empty."
+        @assert length(X_values) == length(Y_distributions) "Dimension mismatch: `X_values` (length $(length(X_values))) and `Y_distributions` (length $(length(Y_distributions))) must be the same size."
+        @assert issorted(X_values) "For a correct heatmap plot, `X_values` must be sorted."
         
+        @assert y_range[1] < y_range[2] "Invalid `y_range`: The first element ($(y_range[1])) must be smaller than the second ($(y_range[2]))."
+        @assert y_resolution > 0 "y_resolution must be a positive integer."
+
+
         # Define the plot grids
         y_grid = range(y_range[1], y_range[2], length=y_resolution)
         x_grid = X_values
@@ -182,10 +191,11 @@ module Visuals
             heatmap_data,
             xlabel = L"x",
             ylabel = L"f(x)",
-            title = plot_title,
-            color = cgrad([:white, :blue, :darkblue]), #TODO find domething aestheticly pleasing
-            colorbar_title = "\nProbability Density",
-            legend = :topleft
+            #color = cgrad([:white, :blue, :darkblue]),
+            color = cgrad([:white, "#83def2", "#729ff2", "#4f88f0", "#4f88f0", :darkblue]),
+            colorbar_title = "Probability Density",
+            legend = :topleft,
+            colorbar_ticks = nothing
         )
         
         # Plot the mean prediction
@@ -201,12 +211,15 @@ module Visuals
         )
         
         # Plot training data on top
-        #TODO add assertions to check for correct types (Vectors of same length)
         if training_data !== nothing
+
             X_train, y_train = training_data
+
+            @assert size(X_train, 1) == length(y_train) "Training data mismatch: `X_train` has $(size(X_train, 1)) rows (points) but `y_train` has $(length(y_train)) elements."
+
             scatter!(
                 p,
-                X_train,
+                X_train[:, training_data_X_dimension],
                 y_train,
                 label = "Samples",
                 color = :darkorange,

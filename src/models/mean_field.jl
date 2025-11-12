@@ -6,10 +6,14 @@ export train_mf_model
     using Turing
     using Distributions
     using DistributionsAD
+    using LinearAlgebra
+    using Zygote
+    using ADTypes
+    using AdvancedVI
     using ..Kernels
     using ..Priors
     using ..Likelihood
-
+    using ..Posteriors
 
 
 #---- function defenition ------------------------------------------------------
@@ -22,8 +26,7 @@ export train_mf_model
     vector `p_log` (representing [log(ϑ)..., log(τ), log(σ²)]).
 
     It uses the `Turing.@addlogprob!` macro to set the target density
-    to our custom `total_log_posterior_unnorm` function, effectively
-    "swapping" the simple base prior for our complex target.
+    to our `total_log_posterior_unnorm` function.
     """
     @model function gpr_model_vi(
         X::Matrix{<:Real},
@@ -32,48 +35,24 @@ export train_mf_model
         c::Real,
         d::Int
     )
-        # 1. Define a simple base prior for our unconstrained parameters.
-        #    The VI will find an approximation *to this parameter vector*.
-        base_prior = MvNormal(zeros(d + 2), 10.0 * I)
+        T = promote_type(eltype(X), eltype(y), typeof(a), typeof(c), typeof(d))
+        # Defining a simple base prior for the unconstrained parameters,
+        # The VI will find an approximation *to this parameter vector*.
+        base_prior = MvNormal(zeros(d + 2), T(10.0) * I)
+        # the ~ registers the parameters that define the base distribution as the ons to optimice
+        # so in essence we want to optimice over a μ and a Σ, and as an initiall guess (x_0) for the optimicer
+        # we have 0 & 10I (just conceptually, because its stochastic sampling optimication, but for the understanding its o.k. to think so)
         p_log ~ base_prior
         
-        # 2. "Swap" the base prior for our custom log-posterior.
-        #    We subtract the logpdf of the base_prior (which `~` added)
-        #    and add the logpdf of our *actual* target distribution.
+        # with this so to say trick we swap the target distribution
+        # it's what tells the optimizer: "When you're deciding how to update μ and Σ, don't compare f* to the base_prior. 
+        #   Compare it to the real target distribution
         Turing.@addlogprob!(
             total_log_posterior_unnorm(p_log, X, y, a=a, c=c) - 
             logpdf(base_prior, p_log)
         )
     end
 
-    """
-        train_mf_model(
-            X::Matrix{<:Real},
-            y::AbstractVector{<:Real};
-            a::Real,
-            c::Real,
-            vi_samples::Int = 1000
-        ) -> MultivariateDistribution
-
-    Trains a GPR model using Mean-Field Variational Inference (ADVI).
-
-    This function implements the "MF: HS" and "MF: TG" models from
-    the paper (depending on the `a` and `c` values passed).
-
-    # Arguments
-    - `X`: The N x d input data matrix.
-    - `y`: The N-dimensional observation vector.
-
-    # Keyword Arguments
-    - `a`: The first hyperparameter (e.g., 0.5 for HS, 0.1 for TG).
-    - `c`: The second hyperparameter (e.g., 0.5 for HS, 0.1 for TG).
-    - `vi_samples`: The number of samples to draw for the VI optimization.
-
-    # Returns
-    - A `MultivariateDistribution` (specifically, a `MvNormal`) which
-    represents the mean-field approximation of the posterior 
-    distribution *over the log-parameters `p_log`*.
-    """
     function train_mf_model(
         X::Matrix{<:Real},
         y::AbstractVector{<:Real};
@@ -83,23 +62,27 @@ export train_mf_model
     )
         N, d = size(X)
         
-        # 1. Instantiate our Turing model
+        # Instantiate our Turing model (the "target")
         model = gpr_model_vi(X, y, a, c, d)
         
-        # 2. Run the Mean-Field VI (ADVI = Automatic Differentiation VI)
-        #    ADMeanField specifies a factorized (diagonal) Gaussian
-        #    approximation, which is exactly what "mean-field" means.
+        # create the mean-field Gaussian approximation
+        q = q_meanfield_gaussian(model)
+        
+        # Define the algorithm to fit "q" to "model"
+        alg = ADVI(ADTypes.AutoZygote())
+
         println("Starting Mean-Field (a=$a, c=$c) training...")
+        
+        # Run VI
         approximate_posterior = vi(
             model, 
-            ADVI{ADMeanField}(),
-            vi_samples # Number of gradient samples
+            q,
+            alg,
+            vi_samples
         )
+        
         println("Mean-Field training complete.")
         
-        # 3. Return the resulting distribution
-        #    This object contains the means and std-devs of the
-        #    approximating Gaussian distribution.
         return approximate_posterior
     end
 

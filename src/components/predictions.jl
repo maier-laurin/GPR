@@ -29,8 +29,8 @@ export predictive_distribution, predictive_distribution_marginal
     *but is numerically unstable for prediction points close to each other* i.e the resulting Kovarianz matrix is not PD, therfore MVNormal cancels with an error.
     """
     function predictive_distribution(
-        X_test::Matrix{<:Real}, 
-        X_train::Matrix{<:Real}, 
+        X_test::AbstractMatrix{<:Real}, 
+        X_train::AbstractMatrix{<:Real}, 
         y_train::AbstractVector{<:Real},
         ϑ::AbstractVector{<:Real},
         τ::Real,
@@ -113,8 +113,8 @@ export predictive_distribution, predictive_distribution_marginal
     """
 
     function predictive_distribution_marginal(
-        X_test::Matrix{<:Real}, 
-        X_train::Matrix{<:Real}, 
+        X_test::AbstractMatrix{<:Real}, 
+        X_train::AbstractMatrix{<:Real}, 
         y_train::AbstractVector{<:Real},
         ϑ::AbstractVector{<:Real},
         τ::Real,
