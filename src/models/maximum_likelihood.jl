@@ -40,7 +40,8 @@ export train_ml_model
     function train_ml_model(
         X::Matrix{<:Real}, 
         y::AbstractVector{<:Real}; 
-        num_restarts::Int = 10
+        num_restarts::Int = 10,
+        use_threads::Bool = true
     )
         T = promote_type(eltype(X), eltype(y))
         N, d = size(X)
@@ -51,16 +52,11 @@ export train_ml_model
             try
                 # Reparameterization (Unconstrained -> Constrained)
                 # We use `exp` to ensure all parameters are positive.
+                #§ where singularity could lead to problems we artificially set the valid domain to (ϵ, ∞)
+                ϵ = 1e-6
                 ϑ = exp.(p_log[1:d])
-                τ = exp(p_log[d+1])
-                #= 
-                ! we use a different activation function for σ² since the optimicer searches to often in lage negative spaces for log(sigma) 
-                 and there which would make the exponent of it effectivly 0 which causes the Kovariance matrix (K+Iσ) to be just positiv semidefinite not strictly
-                 anymore wich causes cholesky to fail, which would be catched and the function gets a value of ∞ but apperently the solver does not like it anyways
-                * so we set the valid domain of σ² to (ϵ, ∞) 
-                =#
-                σ² = log1p(exp(p_log[d+2])) +  1e-6
-
+                τ = exp(p_log[d+1]) +  ϵ
+                σ² = exp(p_log[d+2]) +  ϵ
 
                 # Build Covariance Matrix (Fast Version)
                 # We don't need AD here, so we use the fast, mutating version.
@@ -86,43 +82,65 @@ export train_ml_model
         best_nll = Inf
         best_params_log = Vector{T}(undef, d + 2)
         nthreads = Threads.nthreads()
-        println("Starting ML training with $num_restarts restarts on $nthreads awailable threads...")
+        if use_threads
+            println("Starting ML training with $num_restarts restarts on $nthreads awailable threads...")
+        end
         # the restart loop is trivially paralicable, we only need to be carefull about race contitions
         # therefor we save all solutions and find the best later
         all_results = Vector{Any}(undef, num_restarts)
-        Threads.@threads for i in 1:num_restarts
-            # Random start for *log-parameters* log around 0 -> exp around 1
-            p_start_log = randn(T, d + 2)
-            
-            # Run the optimizer
-            result_i = optimize(
-                nll_objective, 
-                p_start_log, 
-                LBFGS(),
-                Optim.Options(g_tol = 1e-5, iterations = 10000)
-            )
+        # flaged multithreading
+        if use_threads
+            Threads.@threads for i ∈ 1:num_restarts
+                # Random start for *log-parameters* log around 0 -> exp around 1
+                p_start_log = randn(T, d + 2)
+                
+                # Run the optimizer
+                result_i = optimize(
+                    nll_objective, 
+                    p_start_log, 
+                    LBFGS(),
+                    Optim.Options(g_tol = 1e-5, iterations = 10000)
+                )
 
-            all_results[i] = result_i
-            print(".")
-        end
-
-        for result in all_results
-            if Optim.minimum(result) < best_nll
-                best_nll = Optim.minimum(result)
-                best_params_log = Optim.minimizer(result)
+                all_results[i] = result_i
+                print(".")
+            end
+        else
+            # in the unthreaded case we assume a outher process is threaded so the status updates here dont make much sense.
+            for i ∈ 1:num_restarts
+                p_start_log = randn(T, d + 2)
+                result_i = optimize(
+                    nll_objective, 
+                    p_start_log, 
+                    LBFGS(),
+                    Optim.Options(g_tol = 1e-5, iterations = 10000)
+                )
+                all_results[i] = result_i
             end
         end
 
-        println("\nML training complete.")
-        
+        obj_values = Vector{T}(undef, num_restarts)
+        for i ∈ eachindex(all_results)
+            obj_values[i] = Optim.minimum(all_results[i])
+            if Optim.minimum(all_results[i]) < best_nll
+                best_nll = Optim.minimum(all_results[i])
+                best_params_log = Optim.minimizer(all_results[i])
+            end
+        end
+        sort!(obj_values)
+        if use_threads
+            println("\nML training complete.")
+        end
         # Return the best results
+        ϵ = 1e-6
         return (
             params_log = best_params_log,
             params_positive = (
                 ϑ = exp.(best_params_log[1:d]),
-                τ = exp(best_params_log[d+1]),
-                σ² = exp(best_params_log[d+2])
+                τ = exp(best_params_log[d+1]) + ϵ,
+                σ² = exp(best_params_log[d+2]) + ϵ
             ),
+            objective_dist = obj_values,
             min_nll = best_nll
         )
     end

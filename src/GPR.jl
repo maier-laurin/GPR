@@ -1,5 +1,16 @@
 module GPR
 
+#* global constants
+    #for Plotting
+    const TEXTWIDTH = 16.5
+    const FS_T = 12 #fontsice title
+    const FS_G = 11 #fontsice axis labels
+    const FS_A = 11 #fontsice axis tiks
+    const FS_L = 11 #fontsice legend
+    cm_to_pt(x) = Int(round(40.62*x))
+
+    export TEXTWIDTH, FS_T, FS_G, FS_A, FS_L, cm_to_pt
+
 #* components
 include("components/kernels.jl")
 using .Kernels
