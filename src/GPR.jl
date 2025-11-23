@@ -51,8 +51,8 @@ include("models/maximum_likelihood.jl")
 using .MLModel
 export train_ml_model
 
-include("models/mean_field.jl")
+include("models/mean_field_estimation.jl")
 using .MFModel
-export train_mf_model
+export train_mean_field
 
 end # module

@@ -1,6 +1,7 @@
 #* testing the induviduall parts
 1
 using Plots
+using Distributions
 using GPR
 #---- kernel -------------------------------------------------------------------
     
@@ -154,7 +155,7 @@ using GPR
 
 #---- mean field estimation ----------------------------------------------------
 
-    N_obs = 50
+    N_obs = 100
     d_features = 2
     X_data = hcat(randn(N_obs)*3, randn(N_obs)*3)
     ϑ_true = [1.0, 5.0]
@@ -162,7 +163,68 @@ using GPR
     σ2_true = 0.1 
     y_data = generate_gp_data(X_data, ϑ_true, τ_true, σ2_true)
     
-    a_hs = 0.5
-    c_hs = 0.5
-    mf_posterior_hs = train_mf_model(X_data, y_data, a=a_hs, c=c_hs)
+    a_hs = 0.45
+    c_hs = 0.45
 
+    μ, σ, result = train_mean_field(X_data, y_data, total_log_posterior_unnorm; a = a_hs, c = c_hs)
+
+    labs = ["ϑ1", "ϑ2", "τ", "σ"]
+
+    begin
+        #plotting the posteriors all in one plot
+        p = plot(title="mean field posteriors (exp(normal) = lognormal)", 
+            xlabel="x", 
+            ylabel="PDF", 
+            xlims=(0, 6))
+        for i in eachindex(μ)
+            # LogNormal(μ, σ) takes the parameters of the underlying Normal
+            d = LogNormal(μ[i], σ[i])
+            plot(p, x -> pdf(d, x), 
+                0, 6,  # Range to plot over (0 to 6)
+                label=labs[i], 
+                lw=2)
+        end
+        display(p)
+    end
+    #plot them induvidually
+    begin
+        i = 1
+        d = LogNormal(μ[i], σ[i])
+        p = plot(x -> pdf(d, x), 
+                0, 3,
+                label=labs[i],
+                title = "length scale",
+                lw=2)
+        vline!(p, [1.0], linestyle=:dash, lw=2, label="Truth")
+        display(p)
+        #-------------
+        i = 2
+        d = LogNormal(μ[i], σ[i])
+        p = plot(x -> pdf(d, x), 
+                0, 20,
+                label=labs[i],
+                title = "length scale",
+                lw=2)
+        vline!(p, [5.0], linestyle=:dash, lw=2, label="Truth")
+        display(p)
+        #-------------
+        i = 3
+        d = LogNormal(μ[i], σ[i])
+        p = plot(x -> pdf(d, x), 
+                0, 4,
+                label=labs[i],
+                title = "Tau",
+                lw=2)
+        vline!(p, [2.0], linestyle=:dash, lw=2, label="Truth")
+        display(p)
+        #-------------
+        i = 4
+        d = LogNormal(μ[i], σ[i])
+        p = plot(x -> pdf(d, x), 
+                0, 0.5,
+                label=labs[i],
+                title = "Sigma",
+                lw=2)
+        vline!(p, [0.1], linestyle=:dash, lw=2, label="Truth")
+        display(p)
+    end
